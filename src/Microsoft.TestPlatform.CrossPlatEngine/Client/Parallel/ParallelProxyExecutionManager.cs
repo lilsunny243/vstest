@@ -28,6 +28,7 @@ internal sealed class ParallelProxyExecutionManager : IParallelProxyExecutionMan
 {
     private readonly IDataSerializer _dataSerializer;
     private readonly bool _isParallel;
+    private readonly int _parallelLevel;
     private readonly ParallelOperationManager<IProxyExecutionManager, IInternalTestRunEventsHandler, TestRunCriteria> _parallelOperationManager;
     private readonly Dictionary<string, TestRuntimeProviderInfo> _sourceToTestHostProviderMap;
 
@@ -80,6 +81,7 @@ internal sealed class ParallelProxyExecutionManager : IParallelProxyExecutionMan
         _requestData = requestData;
         _dataSerializer = dataSerializer;
         _isParallel = parallelLevel > 1;
+        _parallelLevel = parallelLevel;
         _parallelOperationManager = new(actualProxyManagerCreator, parallelLevel);
         _sourceToTestHostProviderMap = testHostProviders
             .SelectMany(provider => provider.SourceDetails.Select(s => new KeyValuePair<string, TestRuntimeProviderInfo>(s.Source!, provider)))
@@ -113,7 +115,7 @@ internal sealed class ParallelProxyExecutionManager : IParallelProxyExecutionMan
             // _currentRunDataAggregator.MarkAsAborted();
         }
 
-        _parallelOperationManager.StartWork(runnableWorkloads, eventHandler, GetParallelEventHandler, StartTestRunOnConcurrentManager);
+        _parallelOperationManager.StartWork(workloads, eventHandler, GetParallelEventHandler, PrepareTestRunOnConcurrentManager, StartTestRunOnConcurrentManager);
 
         // Why 1? Because this is supposed to be a processId, and that is just the default that was chosen by someone before me,
         // and maybe is checked somewhere, but I don't see it checked in our codebase.
@@ -233,6 +235,9 @@ internal sealed class ParallelProxyExecutionManager : IParallelProxyExecutionMan
         List<ProviderSpecificWorkload<TestRunCriteria>> workloads = new();
         if (testRunCriteria.HasSpecificTests)
         {
+            // We get the expected number of hosts to use to run tests
+            int? numberOfTestHostToUse = TestEngine.GetTargetFrameworkTestHostDemultiplexer(testRunCriteria.TestRunSettings);
+
             // We split test cases to their respective sources, and associate them with additional info about on
             // which type of provider they can run so we can later select the correct workload for the provider
             // if we already have a shared provider running, that can take more sources.
@@ -257,6 +262,30 @@ internal sealed class ParallelProxyExecutionManager : IParallelProxyExecutionMan
                     // Create multiple testcase batches, each having set of testcases from single source,
                     // so each testhost will end up running one source.
                     testCaseBatches = group.Select(w => sourceToTestCasesMap[w.Work]).ToList();
+                    if (numberOfTestHostToUse is not null)
+                    {
+                        if (numberOfTestHostToUse > _parallelLevel)
+                        {
+                            EqtTrace.Warning($"ParallelProxyExecutionManager: adjust the numberOfTestHostToUse to the max parallel level, from {numberOfTestHostToUse} to {_parallelLevel}");
+                            // Adjust to the maximum parallel level
+                            numberOfTestHostToUse = _parallelLevel;
+                        }
+
+                        // Simple round robin distribution
+                        var testCases = testCaseBatches.SelectMany(tcb => tcb).ToList();
+                        var groups = new List<List<TestCase>>();
+                        for (int i = 0; i < numberOfTestHostToUse.Value; i++)
+                        {
+                            groups.Add(new List<TestCase>());
+                        }
+
+                        for (var i = 0; i < testCases.Count; i++)
+                        {
+                            groups[i % numberOfTestHostToUse.Value].Add(testCases[i]);
+                        }
+
+                        testCaseBatches = groups.Where(g => g.Count > 0).Select(g => g.ToArray()).ToList();
+                    }
                 }
 
                 foreach (var testCases in testCaseBatches)
@@ -359,24 +388,58 @@ internal sealed class ParallelProxyExecutionManager : IParallelProxyExecutionMan
             _currentRunDataAggregator);
     }
 
-    /// <summary>
-    /// Triggers the execution for the next data object on the concurrent executor
-    /// Each concurrent executor calls this method, once its completed working on previous data
-    /// </summary>
-    /// <param name="proxyExecutionManager">Proxy execution manager instance.</param>
-    /// <returns>True, if execution triggered</returns>
-    private void StartTestRunOnConcurrentManager(IProxyExecutionManager proxyExecutionManager, IInternalTestRunEventsHandler eventHandler, TestRunCriteria testRunCriteria)
+    private Task PrepareTestRunOnConcurrentManager(IProxyExecutionManager proxyExecutionManager, IInternalTestRunEventsHandler eventHandler, TestRunCriteria testRunCriteria)
     {
-        if (testRunCriteria != null)
+        return Task.Run(() =>
         {
             if (!proxyExecutionManager.IsInitialized)
             {
                 proxyExecutionManager.Initialize(_skipDefaultAdapters);
             }
 
+            // NOTE: No need to increment the number of started clients on initialization since the
+            // client doesn't really count as started unless some work is done on it. Incrementing
+            // the number of clients will result in failing acceptance tests because they expect all
+            // clients to be done running their workloads when aborting/cancelling and that doesn't
+            // happen with an initialized workload that is never run.
+            //
+            // Interlocked.Increment(ref _runStartedClients);
+            proxyExecutionManager.InitializeTestRun(testRunCriteria, eventHandler);
+        });
+    }
+
+    /// <summary>
+    /// Triggers the execution for the next data object on the concurrent executor
+    /// Each concurrent executor calls this method, once its completed working on previous data
+    /// </summary>
+    /// <param name="proxyExecutionManager">Proxy execution manager instance.</param>
+    /// <returns>True, if execution triggered</returns>
+    private void StartTestRunOnConcurrentManager(
+        IProxyExecutionManager proxyExecutionManager,
+        IInternalTestRunEventsHandler eventHandler,
+        TestRunCriteria testRunCriteria,
+        bool initialized,
+        Task? initTask)
+    {
+        if (testRunCriteria != null)
+        {
             Task.Run(() =>
                 {
-                    Interlocked.Increment(ref _runStartedClients);
+                    if (!initialized)
+                    {
+                        if (!proxyExecutionManager.IsInitialized)
+                        {
+                            proxyExecutionManager.Initialize(_skipDefaultAdapters);
+                        }
+
+                        Interlocked.Increment(ref _runStartedClients);
+                        proxyExecutionManager.InitializeTestRun(testRunCriteria, eventHandler);
+                    }
+                    else
+                    {
+                        initTask!.Wait();
+                    }
+
                     EqtTrace.Verbose("ParallelProxyExecutionManager: Execution started. Started clients: " + _runStartedClients);
 
                     proxyExecutionManager.StartTestRun(testRunCriteria, eventHandler);
@@ -406,6 +469,13 @@ internal sealed class ParallelProxyExecutionManager : IParallelProxyExecutionMan
         }
 
         EqtTrace.Verbose("ProxyParallelExecutionManager: No sources available for execution.");
+    }
+
+    public void InitializeTestRun(TestRunCriteria testRunCriteria, IInternalTestRunEventsHandler eventHandler)
+    {
+        // Leaving this empty as it is not really relevant to the parallel proxy managers.
+        // The idea of pre-initializing the test run makes sense only for single proxies like
+        // ProxyExecutionManager or ProxyDiscoveryManager.
     }
 
     public void Dispose()

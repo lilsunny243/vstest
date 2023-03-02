@@ -11,6 +11,8 @@
     <TargetFrameworks>net7.0;$(NetFrameworkMinimum);$(NetCoreAppMinimum)</TargetFrameworks>
     <TargetFrameworks Condition=" '$(DotNetBuildFromSource)' == 'true' ">net7.0;</TargetFrameworks>
     <OutputType>Exe</OutputType>
+    <!-- Prevent the creation of the ".exe" for .NET Core. This was the default on .NET Core 2.1, behavior changed for .NET Core 3.1 -->
+    <UseAppHost>false</UseAppHost>
     <RollForward>Major</RollForward>
     <IsTestProject>false</IsTestProject>
     <PlatformTarget Condition="'$(TargetFramework)' == '$(NetFrameworkMinimum)' AND '$(RuntimeIdentifier)' == '' " >AnyCPU</PlatformTarget>
@@ -22,6 +24,7 @@
       (e.g. System.Runtime 4.1.2 instead of 4.0.0)
     -->
     <AutoGenerateBindingRedirects>false</AutoGenerateBindingRedirects>
+    <DefineConstants>$(DefineConstants);USE_EXTERN_ALIAS</DefineConstants>
 
     <MSBuildWarningsAsMessages>
       $(MSBuildWarningsAsMessages);MSB3276;
@@ -49,7 +52,7 @@
     <ProjectReference Include="..\Microsoft.TestPlatform.ObjectModel\Microsoft.TestPlatform.ObjectModel.csproj" />
     <ProjectReference Include="..\Microsoft.TestPlatform.Client\Microsoft.TestPlatform.Client.csproj" />
     <ProjectReference Include="..\Microsoft.TestPlatform.CommunicationUtilities\Microsoft.TestPlatform.CommunicationUtilities.csproj" />
-    <ProjectReference Include="..\Microsoft.TestPlatform.PlatformAbstractions\Microsoft.TestPlatform.PlatformAbstractions.csproj" />
+    <ProjectReference Include="..\Microsoft.TestPlatform.PlatformAbstractions\Microsoft.TestPlatform.PlatformAbstractions.csproj" Aliases="Abstraction" />
     <ProjectReference Include="..\Microsoft.TestPlatform.Utilities\Microsoft.TestPlatform.Utilities.csproj" />
     <ProjectReference Include="..\Microsoft.TestPlatform.CrossPlatEngine\Microsoft.TestPlatform.CrossPlatEngine.csproj">
       <FromP2P>true</FromP2P>

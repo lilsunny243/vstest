@@ -122,12 +122,13 @@ public class CodeCoverageDataAttachmentsHandler : IDataCollectorAttachmentProces
 
     private static async Task<IList<string>?> MergeCodeCoverageFilesAsync(IList<string> files, CancellationToken cancellationToken)
     {
-        TPDebug.Assert(s_mergeOperationEnumValues != null);
-
         cancellationToken.ThrowIfCancellationRequested();
 
         // Invoke methods
         LoadCodeCoverageAssembly();
+
+        TPDebug.Assert(s_mergeOperationEnumValues != null);
+
         var task = (Task)s_mergeMethodInfo.Invoke(s_classInstance, new object[] { files[0], files, s_mergeOperationEnumValues.GetValue(0)!, true, cancellationToken })!;
         await task.ConfigureAwait(false);
 

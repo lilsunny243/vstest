@@ -117,14 +117,13 @@ public class ProxyDiscoveryManager : IProxyDiscoveryManager, IBaseProxy, ITestDi
 
     #region IProxyDiscoveryManager implementation.
 
-    /// <inheritdoc/>
     public void Initialize(bool skipDefaultAdapters)
     {
         _skipDefaultAdapters = skipDefaultAdapters;
     }
 
     /// <inheritdoc/>
-    public void DiscoverTests(DiscoveryCriteria discoveryCriteria, ITestDiscoveryEventsHandler2 eventHandler)
+    public void InitializeDiscovery(DiscoveryCriteria discoveryCriteria, ITestDiscoveryEventsHandler2 eventHandler, bool skipDefaultAdapters)
     {
         // Multiple method calls will iterate over this sources collection so we want to ensure
         // it's built once.
@@ -151,9 +150,33 @@ public class ProxyDiscoveryManager : IProxyDiscoveryManager, IBaseProxy, ITestDi
 
             if (_isCommunicationEstablished)
             {
-                InitializeExtensions(discoverySources);
-                TPDebug.Assert(_testHostManager is not null, "_testHostManager is null");
-                discoveryCriteria.UpdateDiscoveryCriteria(_testHostManager);
+                InitializeExtensions(discoverySources, skipDefaultAdapters);
+            }
+        }
+        catch (Exception exception)
+        {
+            HandleException(exception);
+        }
+    }
+
+    public void DiscoverTests(DiscoveryCriteria discoveryCriteria, ITestDiscoveryEventsHandler2 eventHandler)
+    {
+        // Multiple method calls will iterate over this sources collection so we want to ensure
+        // it's built once.
+        var discoverySources = discoveryCriteria.Sources.ToArray();
+
+        try
+        {
+            if (!_isCommunicationEstablished)
+            {
+                InitializeDiscovery(discoveryCriteria, eventHandler, _skipDefaultAdapters);
+            }
+
+            TPDebug.Assert(_proxyOperationManager is not null, "ProxyOperationManager is null.");
+
+            if (_isCommunicationEstablished)
+            {
+                discoveryCriteria.UpdateDiscoveryCriteria(_testHostManager!);
 
                 // Consider the first source as the previous source so that if we are discovering a source
                 // with no tests, we will always consider the source as fully discovered when reaching the
@@ -165,31 +188,36 @@ public class ProxyDiscoveryManager : IProxyDiscoveryManager, IBaseProxy, ITestDi
         }
         catch (Exception exception)
         {
-            EqtTrace.Error("ProxyDiscoveryManager.DiscoverTests: Failed to discover tests: {0}", exception);
-
-            // Log to vs ide test output
-            var testMessagePayload = new TestMessagePayload { MessageLevel = TestMessageLevel.Error, Message = exception.ToString() };
-            var rawMessage = _dataSerializer.SerializePayload(MessageType.TestMessage, testMessagePayload);
-            HandleRawMessage(rawMessage);
-
-            // Log to vstest.console
-            // Send a discovery complete to caller. Similar logic is also used in ParallelProxyDiscoveryManager.DiscoverTestsOnConcurrentManager
-            // Aborted is `true`: in case of parallel discovery (or non shared host), an aborted message ensures another discovery manager
-            // created to replace the current one. This will help if the current discovery manager is aborted due to irreparable error
-            // and the test host is lost as well.
-            HandleLogMessage(TestMessageLevel.Error, exception.ToString());
-
-            var discoveryCompletePayload = new DiscoveryCompletePayload()
-            {
-                IsAborted = true,
-                LastDiscoveredTests = null,
-                TotalTests = -1
-            };
-            HandleRawMessage(_dataSerializer.SerializePayload(MessageType.DiscoveryComplete, discoveryCompletePayload));
-            var discoveryCompleteEventsArgs = new DiscoveryCompleteEventArgs(-1, true);
-
-            HandleDiscoveryComplete(discoveryCompleteEventsArgs, new List<TestCase>());
+            HandleException(exception);
         }
+    }
+
+    private void HandleException(Exception exception)
+    {
+        EqtTrace.Error("ProxyDiscoveryManager.DiscoverTests: Failed to discover tests: {0}", exception);
+
+        // Log to vs ide test output
+        var testMessagePayload = new TestMessagePayload { MessageLevel = TestMessageLevel.Error, Message = exception.ToString() };
+        var rawMessage = _dataSerializer.SerializePayload(MessageType.TestMessage, testMessagePayload);
+        HandleRawMessage(rawMessage);
+
+        // Log to vstest.console
+        // Send a discovery complete to caller. Similar logic is also used in ParallelProxyDiscoveryManager.DiscoverTestsOnConcurrentManager
+        // Aborted is `true`: in case of parallel discovery (or non shared host), an aborted message ensures another discovery manager
+        // created to replace the current one. This will help if the current discovery manager is aborted due to irreparable error
+        // and the test host is lost as well.
+        HandleLogMessage(TestMessageLevel.Error, exception.ToString());
+
+        var discoveryCompletePayload = new DiscoveryCompletePayload
+        {
+            IsAborted = true,
+            LastDiscoveredTests = null,
+            TotalTests = -1
+        };
+        HandleRawMessage(_dataSerializer.SerializePayload(MessageType.DiscoveryComplete, discoveryCompletePayload));
+        var discoveryCompleteEventsArgs = new DiscoveryCompleteEventArgs(-1, true);
+
+        HandleDiscoveryComplete(discoveryCompleteEventsArgs, new List<TestCase>());
     }
 
     /// <inheritdoc/>
@@ -238,13 +266,17 @@ public class ProxyDiscoveryManager : IProxyDiscoveryManager, IBaseProxy, ITestDi
             return;
         }
 
-        // When no test session is being used we don't share the testhost
+        // When no test session is being used, we don't share the testhost
         // between test discovery and test run. The testhost is closed upon
         // successfully completing the operation it was spawned for.
         //
         // In contrast, the new workflow (using test sessions) means we should keep
-        // the testhost alive until explicitly closed by the test session owner.
-        if (_testSessionInfo == null)
+        // the testhost alive until explicitly closed by the test session owner, but
+        // only if the testhost is part of a test session (i.e. the proxy operation manager
+        // id is valid), since there is the distinct possibility of test session criteria
+        // changing between spawn and discovery/run, causing a new proxy operation manager
+        // to be spawned on demand instead of dequeuing an incompatible proxy from the pool.
+        if (_testSessionInfo == null || _proxyOperationManager.Id < 0)
         {
             _proxyOperationManager.Close();
             return;
@@ -313,9 +345,9 @@ public class ProxyDiscoveryManager : IProxyDiscoveryManager, IBaseProxy, ITestDi
     }
     #endregion
 
-    private void InitializeExtensions(IEnumerable<string> sources)
+    private void InitializeExtensions(IEnumerable<string> sources, bool skipDefaultAdapters)
     {
-        var extensions = TestPluginCache.Instance.GetExtensionPaths(TestPlatformConstants.TestAdapterEndsWithPattern, _skipDefaultAdapters);
+        var extensions = TestPluginCache.Instance.GetExtensionPaths(TestPlatformConstants.TestAdapterEndsWithPattern, skipDefaultAdapters);
 
         // Filter out non existing extensions
         var nonExistingExtensions = extensions.Where(extension => !_fileHelper.Exists(extension));

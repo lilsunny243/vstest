@@ -218,6 +218,7 @@ internal class ArgumentProcessorFactory
         new DisableAutoFakesArgumentProcessor(),
         new ResponseFileArgumentProcessor(),
         new EnableBlameArgumentProcessor(),
+        new AeDebuggerArgumentProcessor(),
         new UseVsixExtensionsArgumentProcessor(),
         new ListDiscoverersArgumentProcessor(),
         new ListExecutorsArgumentProcessor(),
@@ -225,6 +226,7 @@ internal class ArgumentProcessorFactory
         new ListSettingsProvidersArgumentProcessor(),
         new ListFullyQualifiedTestsArgumentProcessor(),
         new ListTestsTargetPathArgumentProcessor(),
+        new ShowDeprecateDotnetVStestMessageArgumentProcessor(),
         new EnvironmentArgumentProcessor()
     };
 

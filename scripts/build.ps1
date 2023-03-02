@@ -1038,12 +1038,13 @@ function Copy-CodeCoverage-Package-Artifacts {
     $internalCodeCoveragePackagesDir = Join-Path $env:TP_PACKAGES_DIR "microsoft.internal.codecoverage\$codeCoverageExternalsVersion\contentFiles\any\any\"
     $codeCoverageCorePackagesDir = Join-Path $env:TP_PACKAGES_DIR "microsoft.codecoverage.core\$codeCoverageExternalsVersion\lib\$TPB_TargetFrameworkNS20"
     $codeCoverageInterprocessPackagesDir = Join-Path $env:TP_PACKAGES_DIR "microsoft.codecoverage.interprocess\$codeCoverageExternalsVersion\lib\$TPB_TargetFrameworkNS20"
+    $codeCoverageInterprocessNetfxPackagesDir = Join-Path $env:TP_PACKAGES_DIR "microsoft.codecoverage.interprocess\$codeCoverageExternalsVersion\lib\$TPB_TargetFramework472"
     $codeCoverageInstrumentationPackagesDir = Join-Path $env:TP_PACKAGES_DIR "microsoft.codecoverage.instrumentation\$codeCoverageExternalsVersion\lib\$TPB_TargetFrameworkNS20"
+    $codeCoverageInstrumentationNativePackagesDir = Join-Path $env:TP_PACKAGES_DIR "microsoft.codecoverage.instrumentation\$codeCoverageExternalsVersion\runtimes\win\native"
     $codeCoverageImUbuntuPackagesDir = Join-Path $env:TP_PACKAGES_DIR "microsoft.internal.codecoverage\$codeCoverageExternalsVersion\contentFiles\any\any\InstrumentationEngine\ubuntu"
     $codeCoverageImAlpinePackagesDir = Join-Path $env:TP_PACKAGES_DIR "microsoft.internal.codecoverage\$codeCoverageExternalsVersion\contentFiles\any\any\InstrumentationEngine\alpine"
     $codeCoverageImMacosPackagesDir = Join-Path $env:TP_PACKAGES_DIR "microsoft.internal.codecoverage\$codeCoverageExternalsVersion\contentFiles\any\any\InstrumentationEngine\macos"
     $codeCoverageTelemetryPackagesDir = Join-Path $env:TP_PACKAGES_DIR "microsoft.codecoverage.telemetry\$codeCoverageExternalsVersion\lib\$TPB_TargetFrameworkNS20"
-    $telemetryDirectory = Join-Path $env:TP_PACKAGES_DIR "microsoft.internal.codecoverage\$codeCoverageExternalsVersion\contentFiles\any\any\Microsoft.VisualStudio.Telemetry"
 
     $microsoftCodeCoveragePackageDir = $(Join-Path $env:TP_OUT_DIR "$TPB_Configuration\Microsoft.CodeCoverage\")
     $microsoftCodeCoverageExtensionsPackageDir = $(Join-Path $env:TP_OUT_DIR "$TPB_Configuration\Microsoft.CodeCoverage.Extensions\")
@@ -1058,17 +1059,19 @@ function Copy-CodeCoverage-Package-Artifacts {
     Copy-Item $codeCoverageInstrumentationPackagesDir\Microsoft.CodeCoverage.Instrumentation.dll $microsoftCodeCoveragePackageDir -Force
     Copy-Item $codeCoverageInstrumentationPackagesDir\Mono.Cecil.dll $microsoftCodeCoveragePackageDir -Force
     Copy-Item $codeCoverageInstrumentationPackagesDir\Mono.Cecil.Pdb.dll $microsoftCodeCoveragePackageDir -Force
+    Copy-Item $codeCoverageInstrumentationPackagesDir\Mono.Cecil.Rocks.dll $microsoftCodeCoveragePackageDir -Force
+    Copy-Item $codeCoverageInstrumentationPackagesDir\Microsoft.DiaSymReader.dll $microsoftCodeCoveragePackageDir -Force
+    Copy-Item $codeCoverageInstrumentationNativePackagesDir\Microsoft.DiaSymReader.Native.x86.dll $microsoftCodeCoveragePackageDir -Force
+    Copy-Item $codeCoverageInstrumentationNativePackagesDir\Microsoft.DiaSymReader.Native.amd64.dll $microsoftCodeCoveragePackageDir -Force
+    Copy-Item $codeCoverageInstrumentationNativePackagesDir\Microsoft.DiaSymReader.Native.arm64.dll $microsoftCodeCoveragePackageDir -Force
+    Copy-Item $codeCoverageInstrumentationNativePackagesDir\Microsoft.DiaSymReader.Native.arm.dll $microsoftCodeCoveragePackageDir -Force
     Copy-Item $codeCoverageTelemetryPackagesDir\Microsoft.CodeCoverage.Telemetry.dll $microsoftCodeCoveragePackageDir -Force
-    Copy-Item $telemetryDirectory\Microsoft.VisualStudio.Telemetry.dll $microsoftCodeCoveragePackageDir -Force
-    Copy-Item $telemetryDirectory\Microsoft.VisualStudio.RemoteControl.dll $microsoftCodeCoveragePackageDir -Force
-    Copy-Item $telemetryDirectory\Microsoft.VisualStudio.Utilities.Internal.dll $microsoftCodeCoveragePackageDir -Force
-    Copy-Item $telemetryDirectory\Microsoft.Win32.Registry.dll $microsoftCodeCoveragePackageDir -Force
-    Copy-Item $telemetryDirectory\System.Runtime.CompilerServices.Unsafe.dll $microsoftCodeCoveragePackageDir -Force
     Copy-Item $internalCodeCoveragePackagesDir\CodeCoverage $microsoftCodeCoveragePackageDir -Force -Recurse
     Copy-Item $internalCodeCoveragePackagesDir\InstrumentationEngine $microsoftCodeCoveragePackageDir -Force -Recurse
     Copy-Item $internalCodeCoveragePackagesDir\Shim $microsoftCodeCoveragePackageDir -Force -Recurse
 
     Copy-Item $traceDataCollectorPackagesNetFxDir\Microsoft.VisualStudio.TraceDataCollector.dll $microsoftCodeCoverageExtensionsPackageDir -Force
+    Copy-Item $codeCoverageInterprocessNetfxPackagesDir\Microsoft.CodeCoverage.Interprocess.dll $microsoftCodeCoverageExtensionsPackageDir -Force
 
     New-Item -ItemType directory -Path $microsoftCodeCoveragePackageDir\InstrumentationEngine\ubuntu\ -Force | Out-Null
     Copy-Item $codeCoverageImUbuntuPackagesDir\x64 $microsoftCodeCoveragePackageDir\InstrumentationEngine\ubuntu\ -Force -Recurse

@@ -11,13 +11,11 @@
     <license type="file">LICENSE_NET.txt</license>
     <iconUrl>http://go.microsoft.com/fwlink/?LinkID=288859</iconUrl>
     <icon>Icon.png</icon>
-    <projectUrl>https://github.com/microsoft/vstest/</projectUrl>
+    <projectUrl>https://github.com/microsoft/codecoverage</projectUrl>
     <copyright>© Microsoft Corporation. All rights reserved.</copyright>
     <tags>vstest visual-studio unittest testplatform mstest microsoft test testing codecoverage code-coverage</tags>
     <repository type="git"
-                url="https://github.com/microsoft/vstest"
-                branch="$BranchName$"
-                commit="$CommitId$" />
+                url="https://github.com/microsoft/codecoverage" />
 
     <dependencies>
       <group targetFramework="net462"></group>
@@ -38,6 +36,8 @@
     <file src="Microsoft.CodeCoverage\Microsoft.CodeCoverage.Instrumentation.dll" target="build\netstandard2.0\" />
     <file src="Microsoft.CodeCoverage\Mono.Cecil.dll" target="build\netstandard2.0\" />
     <file src="Microsoft.CodeCoverage\Mono.Cecil.Pdb.dll" target="build\netstandard2.0\" />
+    <file src="Microsoft.CodeCoverage\Mono.Cecil.Rocks.dll" target="build\netstandard2.0\" />
+    <file src="Microsoft.CodeCoverage\Microsoft.DiaSymReader.dll" target="build\netstandard2.0\" />
 
     <file src="Microsoft.CodeCoverage\CodeCoverage\CodeCoverage.config" target="build\netstandard2.0\CodeCoverage\" />
     <file src="Microsoft.CodeCoverage\CodeCoverage\CodeCoverage.exe" target="build\netstandard2.0\CodeCoverage\" />
